@@ -221,11 +221,17 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
         while(TokenMatchCString(PeekToken(tokenizer), "("))
         {
             // NOTE(rjf): A function call operator.
+            NextToken(tokenizer, 0);
             AbstractSyntaxTreeNode *call = MemoryArenaAllocateNode(arena);
             call->type = ABSTRACT_SYNTAX_TREE_NODE_function_call;
             call->function_call.closure = result;
             call->function_call.parameter = ParseExpression(tokenizer, arena);
             result = call;
+            
+            if(TokenMatchCString(PeekToken(tokenizer), ")"))
+            {
+                NextToken(tokenizer, 0);
+            }
         }
     }
     

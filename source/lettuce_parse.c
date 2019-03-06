@@ -37,7 +37,7 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena, ParseError *error_out)
             // NOTE(rjf): ERROR! Why is there not a following paren?
             if(error_out)
             {
-                error_out->string = "Expected ).";
+                error_out->string = "Expected ) or ].";
             }
             goto end_parse;
         }
@@ -317,14 +317,24 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena, ParseError *error_out)
         }
         else
         {
-            // NOTE(rjf): ERROR! Symbol was not a binary operator, so we really aren't
-            //            sure what it is.
-            if(error_out)
+            if(TokenMatchCString(token, "]") || TokenMatchCString(token, ")"))
             {
-                error_out->string = MakeStringOnArenaF(arena, "Unexpected token %.*s.",
-                                                       token.string_length, token.string);
+                // NOTE(rjf): This is not a token we are looking for, and so we should
+                //            move along (this is used to end an expression, so this is
+                //            to be taken care of by a parent call).
             }
-            goto end_parse;
+            else
+            {
+                
+                // NOTE(rjf): ERROR! Symbol was not a binary operator, so we really aren't
+                //            sure what it is.
+                if(error_out)
+                {
+                    error_out->string = MakeStringOnArenaF(arena, "Unexpected token %.*s.",
+                                                           token.string_length, token.string);
+                }
+                goto end_parse;
+            }
         }
     }
     

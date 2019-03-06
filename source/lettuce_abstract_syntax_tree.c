@@ -175,7 +175,7 @@ PrintAbstractSyntaxTree(AbstractSyntaxTreeNode *root)
             PrintAbstractSyntaxTree(root->let.binding_expression);
             printf(") in (");
             PrintAbstractSyntaxTree(root->let.body_expression);
-            printf(")\n\n");
+            printf(")");
             break;
         }
         case ABSTRACT_SYNTAX_TREE_NODE_identifier:

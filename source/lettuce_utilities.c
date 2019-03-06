@@ -1,4 +1,3 @@
-
 static char *
 LoadEntireFileAndNullTerminate(char *filename)
 {
@@ -85,5 +84,13 @@ StringMatch(char *string1, int string1_length,
         }
     }
     
+    return result;
+}
+
+static unsigned int
+CalculateCStringLength(char *str)
+{
+    unsigned int result = 0;
+    for(; str[result++];);
     return result;
 }

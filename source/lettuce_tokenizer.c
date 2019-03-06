@@ -20,6 +20,19 @@ GetNextTokenFromBuffer(char *buffer)
 {
     Token token = {0};
     
+    // NOTE(rjf): These do not necessarily correspond to operators
+    //            or anything else, they just are chunks of text that
+    //            the tokenizer should break apart, without needing
+    //            whitespace, e.g. "))" should produce two ")" tokens,
+    //            not one "))" token.
+    
+    char *symbol_groups[] = {
+        "(",
+        ")",
+        "[",
+        "]",
+    };
+    
     for(int i = 0; buffer[i]; ++i)
     {
         int j;
@@ -62,6 +75,17 @@ GetNextTokenFromBuffer(char *buffer)
             {
                 if(!CharIsSymbolic(buffer[j]))
                 {
+                    break;
+                }
+            }
+            
+            for(int k = 0; k < sizeof(symbol_groups)/sizeof(symbol_groups[0]); ++k)
+            {
+                int symbol_group_len = CalculateCStringLength(symbol_groups[k]);
+                if(StringMatch(symbol_groups[k], symbol_group_len,
+                               buffer+i, symbol_group_len))
+                {
+                    j = i + symbol_group_len;
                     break;
                 }
             }

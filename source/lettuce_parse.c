@@ -22,12 +22,12 @@ static void
 ParseContextCleanUp(ParseContext *context)
 {
     free(context->first_chunk.memory);
-    for(ParseContextMemoryChunk *chunk = context->active_chunk;
+    for(ParseContextMemoryChunk *chunk = context->first_chunk.next;
         chunk;)
     {
         ParseContextMemoryChunk *next_chunk = chunk->next;
         free(chunk);
-        chunk = chunk->next;
+        chunk = next_chunk;
     }
 }
 

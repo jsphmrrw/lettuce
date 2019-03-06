@@ -109,21 +109,27 @@ Tokenizer;
 static int
 TokenMatchCString(Token a, char *b)
 {
-    int matches = 1;
-    for(int i = 0; i < a.string_length; ++i)
+    int matches = 0;
+    
+    if(a.type > 0)
     {
-        if(a.string[i] != b[i])
+        matches = 1;
+        for(int i = 0; i < a.string_length; ++i)
         {
-            matches = 0;
-            break;
+            if(a.string[i] != b[i])
+            {
+                matches = 0;
+                break;
+            }
+            
+            if(b[i+1] == 0)
+            {
+                break;
+            }
+            
         }
-        
-        if(b[i+1] == 0)
-        {
-            break;
-        }
-        
     }
+    
     return matches;
 }
 

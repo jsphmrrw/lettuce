@@ -36,6 +36,7 @@ enum
     ABSTRACT_SYNTAX_TREE_NODE_boolean_constant,
     ABSTRACT_SYNTAX_TREE_NODE_binary_operator,
     ABSTRACT_SYNTAX_TREE_NODE_unary_operator,
+    ABSTRACT_SYNTAX_TREE_NODE_function_definition,
 };
 
 typedef struct AbstractSyntaxTreeNode AbstractSyntaxTreeNode;
@@ -87,6 +88,21 @@ typedef struct AbstractSyntaxTreeNode
             AbstractSyntaxTreeNode *expression;
         }
         unary_operator;
+        
+        struct FunctionDefinition
+        {
+            char *param_name;
+            int param_name_length;
+            AbstractSyntaxTreeNode *body;
+        }
+        function_definition;
+        
+        struct FunctionCall
+        {
+            AbstractSyntaxTreeNode *closure;
+            AbstractSyntaxTreeNode *parameter;
+        }
+        function_call;
         
     };
 }
@@ -142,6 +158,7 @@ enum
 {
     EVALUATION_RESULT_number,
     EVALUATION_RESULT_boolean,
+    EVALUATION_RESULT_closure,
 };
 
 typedef struct EvaluationResult
@@ -191,6 +208,13 @@ HashString(char *str, int str_len)
     }
     
     return hash;
+}
+
+static void
+InterpreterEnvironmentCleanUp(InterpreterEnvironment *environment)
+{
+    free(environment->identifier_table_values);
+    free(environment->identifier_table_keys);
 }
 
 static int

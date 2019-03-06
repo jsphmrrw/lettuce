@@ -18,6 +18,19 @@ typedef struct ParseContext
 }
 ParseContext;
 
+static void
+ParseContextCleanUp(ParseContext *context)
+{
+    free(context->first_chunk.memory);
+    for(ParseContextMemoryChunk *chunk = context->active_chunk;
+        chunk;)
+    {
+        ParseContextMemoryChunk *next_chunk = chunk->next;
+        free(chunk);
+        chunk = chunk->next;
+    }
+}
+
 static void *
 ParseContextAllocate(ParseContext *context, unsigned int size)
 {
@@ -93,9 +106,22 @@ ParseExpression(Tokenizer *tokenizer, ParseContext *context)
             // NOTE(rjf): ERROR! Why is there not a following paren?
         }
     }
+    else if(TokenMatchCString(token, "function"))
+    {
+        // TODO(rjf): Function definition.
+        
+        // AbstractSyntaxTreeNode *def = ParseContextAllocateNode(context);
+        // def->type = ABSTRACT_SYNTAX_TREE_NODE_function_definition;
+        // def->function_definition.param_name = identifier.string;
+        // def->function_definition.param_name_length = identifier.string_length;
+        // def->function_definition.body = ParseExpression(tokenizer, context);
+        
+        
+    }
     else if(TokenMatchCString(token, "let"))
     {
         // NOTE(rjf): A let binding.
+        
         NextToken(tokenizer, 0);
         Token identifier;
         

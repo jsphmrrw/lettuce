@@ -32,6 +32,9 @@ InterpretCode(char *code)
     {
         printf("Program was evaluated to boolean value %s.\n", result.boolean ? "true" : "false");
     }
+    
+    InterpreterEnvironmentCleanUp(environment);
+    ParseContextCleanUp(context);
 }
 
 int

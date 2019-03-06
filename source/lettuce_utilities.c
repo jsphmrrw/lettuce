@@ -94,6 +94,7 @@ CalculateCStringLength(char *str)
 {
     unsigned int result = 0;
     for(; str[result++];);
+    --result;
     return result;
 }
 

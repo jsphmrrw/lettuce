@@ -143,8 +143,7 @@ typedef struct AbstractSyntaxTreeNode
         
         struct FunctionCall
         {
-            char *name;
-            int name_length;
+            AbstractSyntaxTreeNode *closure;
             AbstractSyntaxTreeNode *parameter;
         }
         function_call;
@@ -223,8 +222,8 @@ PrintAbstractSyntaxTree(AbstractSyntaxTreeNode *root)
         }
         case ABSTRACT_SYNTAX_TREE_NODE_function_call:
         {
-            printf("%.*s(", root->function_call.name_length,
-                   root->function_call.name);
+            PrintAbstractSyntaxTree(root->function_call.closure);
+            printf("(");
             PrintAbstractSyntaxTree(root->function_call.parameter);
             printf(")");
             break;
@@ -520,10 +519,7 @@ EvaluateAbstractSyntaxTree(InterpreterEnvironment *environment,
         }
         case ABSTRACT_SYNTAX_TREE_NODE_function_call:
         {
-            EvaluationResult closure = {0};
-            if(InterpreterEnvironmentLookUp(environment, root->function_call.name,
-                                            root->function_call.name_length,
-                                            &closure))
+            EvaluationResult closure = EvaluateAbstractSyntaxTree(environment, root->function_call.closure);
             {
                 InterpreterEnvironment *call_environment = closure.closure.environment;
                 EvaluationResult arg = EvaluateAbstractSyntaxTree(call_environment, root->function_call.parameter);
@@ -533,10 +529,6 @@ EvaluateAbstractSyntaxTree(InterpreterEnvironment *environment,
                 result = EvaluateAbstractSyntaxTree(call_environment, closure.closure.body);
                 InterpreterEnvironmentDelete(call_environment, closure.closure.param_name,
                                              closure.closure.param_name_length);
-            }
-            else
-            {
-                // NOTE(rjf): ERROR! Function not found.
             }
             break;
         }

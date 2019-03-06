@@ -132,25 +132,11 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
             // NOTE(rjf): In this case, we must have an identifier being used.
             NextToken(tokenizer, 0);
             
-            // NOTE(rjf): Is it a function call? If so, we should expect a (param).
-            if(TokenMatchCString(PeekToken(tokenizer), "("))
-            {
-                AbstractSyntaxTreeNode *call = MemoryArenaAllocateNode(arena);
-                call->type = ABSTRACT_SYNTAX_TREE_NODE_function_call;
-                call->function_call.name = token.string;
-                call->function_call.name_length = token.string_length;
-                call->function_call.parameter = ParseExpression(tokenizer, arena);
-                result = call;
-            }
-            else
-            {
-                // NOTE(rjf): This is just an identifier being used.
-                AbstractSyntaxTreeNode *val = MemoryArenaAllocateNode(arena);
-                val->type = ABSTRACT_SYNTAX_TREE_NODE_identifier;
-                val->identifier.string = token.string;
-                val->identifier.string_length = token.string_length;
-                result = val;
-            }
+            AbstractSyntaxTreeNode *val = MemoryArenaAllocateNode(arena);
+            val->type = ABSTRACT_SYNTAX_TREE_NODE_identifier;
+            val->identifier.string = token.string;
+            val->identifier.string_length = token.string_length;
+            result = val;
         }
     }
     else if(token.type == TOKEN_numeric_constant)
@@ -179,7 +165,8 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
     
     token = PeekToken(tokenizer);
     
-    if(!TokenMatchCString(token, ")") &&
+    if(!TokenMatchCString(token, "(") &&
+       !TokenMatchCString(token, ")") &&
        token.type == TOKEN_symbolic_block)
     {
         // NOTE(rjf): We could have a binary operator here.
@@ -226,6 +213,19 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
         {
             // NOTE(rjf): ERROR! Symbol was not a binary operator, so we really aren't
             //            sure what it is.
+        }
+    }
+    
+    if(result)
+    {
+        while(TokenMatchCString(PeekToken(tokenizer), "("))
+        {
+            // NOTE(rjf): A function call operator.
+            AbstractSyntaxTreeNode *call = MemoryArenaAllocateNode(arena);
+            call->type = ABSTRACT_SYNTAX_TREE_NODE_function_call;
+            call->function_call.closure = result;
+            call->function_call.parameter = ParseExpression(tokenizer, arena);
+            result = call;
         }
     }
     

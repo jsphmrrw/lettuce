@@ -1,11 +1,17 @@
 
 #define BINARY_OPERATOR_LIST \
+BinaryOperator(or, "||") \
+BinaryOperator(and, "&&") \
+BinaryOperator(less_than, "<") \
+BinaryOperator(greater_than, ">") \
+BinaryOperator(less_than_equal_to, "<=") \
+BinaryOperator(greater_than_equal_to, ">=") \
+BinaryOperator(equal_to, "==") \
+BinaryOperator(not_equal_to, "!=") \
 BinaryOperator(plus, "+") \
 BinaryOperator(minus, "-") \
 BinaryOperator(multiply, "*") \
 BinaryOperator(divide, "/") \
-BinaryOperator(or, "||") \
-BinaryOperator(and, "&&") \
 
 enum
 {
@@ -36,6 +42,7 @@ enum
     ABSTRACT_SYNTAX_TREE_NODE_boolean_constant,
     ABSTRACT_SYNTAX_TREE_NODE_binary_operator,
     ABSTRACT_SYNTAX_TREE_NODE_unary_operator,
+    ABSTRACT_SYNTAX_TREE_NODE_if_then_else,
     ABSTRACT_SYNTAX_TREE_NODE_function_definition,
     ABSTRACT_SYNTAX_TREE_NODE_function_call,
 };
@@ -118,6 +125,14 @@ typedef struct AbstractSyntaxTreeNode
         }
         unary_operator;
         
+        struct IfThenElse
+        {
+            AbstractSyntaxTreeNode *condition;
+            AbstractSyntaxTreeNode *pass_code;
+            AbstractSyntaxTreeNode *fail_code;
+        }
+        if_then_else;
+        
         struct FunctionDefinition
         {
             char *param_name;
@@ -184,6 +199,19 @@ PrintAbstractSyntaxTree(AbstractSyntaxTreeNode *root)
             
                 PrintAbstractSyntaxTree(root->binary_operator.right);
             printf(")");
+            break;
+        }
+        case ABSTRACT_SYNTAX_TREE_NODE_if_then_else:
+        {
+            printf("if(");
+            PrintAbstractSyntaxTree(root->if_then_else.condition);
+            printf(") then ");
+            PrintAbstractSyntaxTree(root->if_then_else.pass_code);
+            if(root->if_then_else.fail_code)
+            {
+                printf(" else ");
+                PrintAbstractSyntaxTree(root->if_then_else.fail_code);
+            }
             break;
         }
         case ABSTRACT_SYNTAX_TREE_NODE_function_definition:
@@ -458,6 +486,25 @@ EvaluateAbstractSyntaxTree(InterpreterEnvironment *environment,
             }
             break;
         }
+        case ABSTRACT_SYNTAX_TREE_NODE_if_then_else:
+        {
+            EvaluationResult condition_evaluation =
+                EvaluateAbstractSyntaxTree(environment, root->if_then_else.condition);
+            
+            if(condition_evaluation.boolean)
+            {
+                result = EvaluateAbstractSyntaxTree(environment, root->if_then_else.pass_code);
+            }
+            else
+            {
+                if(root->if_then_else.fail_code)
+                {
+                    result = EvaluateAbstractSyntaxTree(environment, root->if_then_else.fail_code);
+                }
+            }
+            
+            break;
+        }
         case ABSTRACT_SYNTAX_TREE_NODE_function_definition:
         {
             EvaluationResult closure = {
@@ -539,6 +586,36 @@ EvaluateAbstractSyntaxTree(InterpreterEnvironment *environment,
             {
                 result.type = EVALUATION_RESULT_boolean;
                 result.boolean = left_eval.boolean || right_eval.boolean;
+            }
+            else if(root->binary_operator.type == BINARY_OPERATOR_less_than)
+            {
+                result.type = EVALUATION_RESULT_boolean;
+                result.boolean = left_eval.number < right_eval.number;
+            }
+            else if(root->binary_operator.type == BINARY_OPERATOR_less_than_equal_to)
+            {
+                result.type = EVALUATION_RESULT_boolean;
+                result.boolean = left_eval.number <= right_eval.number;
+            }
+            else if(root->binary_operator.type == BINARY_OPERATOR_greater_than)
+            {
+                result.type = EVALUATION_RESULT_boolean;
+                result.boolean = left_eval.number > right_eval.number;
+            }
+            else if(root->binary_operator.type == BINARY_OPERATOR_greater_than_equal_to)
+            {
+                result.type = EVALUATION_RESULT_boolean;
+                result.boolean = left_eval.number >= right_eval.number;
+            }
+            else if(root->binary_operator.type == BINARY_OPERATOR_equal_to)
+            {
+                result.type = EVALUATION_RESULT_boolean;
+                result.boolean = left_eval.number == right_eval.number;
+            }
+            else if(root->binary_operator.type == BINARY_OPERATOR_not_equal_to)
+            {
+                result.type = EVALUATION_RESULT_boolean;
+                result.boolean = left_eval.number != right_eval.number;
             }
             
             break;

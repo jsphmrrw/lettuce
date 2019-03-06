@@ -21,6 +21,33 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
             // NOTE(rjf): ERROR! Why is there not a following paren?
         }
     }
+    else if(TokenMatchCString(token, "if"))
+    {
+        // NOTE(rjf): If/Then/Else.
+        NextToken(tokenizer, 0);
+        
+        if(TokenMatchCString(PeekToken(tokenizer), "then"))
+        {
+            NextToken(tokenizer, 0);
+        }
+        
+        AbstractSyntaxTreeNode *if_then_else = MemoryArenaAllocateNode(arena);
+        if_then_else->type = ABSTRACT_SYNTAX_TREE_NODE_if_then_else;
+        if_then_else->if_then_else.condition = ParseExpression(tokenizer, arena);
+        if_then_else->if_then_else.pass_code = ParseExpression(tokenizer, arena);
+        
+        if(TokenMatchCString(PeekToken(tokenizer), "else"))
+        {
+            NextToken(tokenizer, 0);
+            if_then_else->if_then_else.fail_code = ParseExpression(tokenizer, arena);
+        }
+        else
+        {
+            if_then_else->if_then_else.fail_code = 0;
+        }
+        
+        result = if_then_else;
+    }
     else if(TokenMatchCString(token, "function"))
     {
         // NOTE(rjf): Function definition.

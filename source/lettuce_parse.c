@@ -1,91 +1,6 @@
 
-#define PARSE_CONTEXT_MEMORY_CHUNK_SIZE 1024
-
-typedef struct ParseContextMemoryChunk ParseContextMemoryChunk;
-typedef struct ParseContextMemoryChunk
-{
-    unsigned int memory_size;
-    unsigned int memory_alloc_pos;
-    void *memory;
-    ParseContextMemoryChunk *next;
-}
-ParseContextMemoryChunk;
-
-typedef struct ParseContext
-{
-    ParseContextMemoryChunk first_chunk;
-    ParseContextMemoryChunk *active_chunk;
-}
-ParseContext;
-
-static void
-ParseContextCleanUp(ParseContext *context)
-{
-    free(context->first_chunk.memory);
-    for(ParseContextMemoryChunk *chunk = context->first_chunk.next;
-        chunk;)
-    {
-        ParseContextMemoryChunk *next_chunk = chunk->next;
-        free(chunk);
-        chunk = next_chunk;
-    }
-}
-
-static void *
-ParseContextAllocate(ParseContext *context, unsigned int size)
-{
-    void *result = 0;
-    
-    if(!context->active_chunk)
-    {
-        context->active_chunk = &context->first_chunk;
-    }
-    
-    ParseContextMemoryChunk *chunk = context->active_chunk;
-    
-    if(!chunk->memory)
-    {
-        chunk->memory_size = PARSE_CONTEXT_MEMORY_CHUNK_SIZE;
-        if(chunk->memory_size < size)
-        {
-            chunk->memory_size = size;
-        }
-        chunk->memory = malloc(chunk->memory_size);
-        chunk->memory_alloc_pos = 0;
-        chunk->next = 0;
-    }
-    
-    if(chunk->memory_alloc_pos + size > chunk->memory_size)
-    {
-        unsigned int needed_size = PARSE_CONTEXT_MEMORY_CHUNK_SIZE;
-        if(needed_size < size)
-        {
-            needed_size = size;
-        }
-        ParseContextMemoryChunk *new_chunk = malloc(sizeof(ParseContextMemoryChunk) + needed_size);
-        chunk->next = new_chunk;
-        new_chunk->memory = (char *)new_chunk + sizeof(ParseContextMemoryChunk);
-        new_chunk->memory_size = needed_size;
-        new_chunk->memory_alloc_pos = 0;
-        new_chunk->next = 0;
-        chunk = chunk->next;
-        context->active_chunk = chunk;
-    }
-    
-    result = (char *)chunk->memory + chunk->memory_alloc_pos;
-    chunk->memory_alloc_pos += size;
-    
-    return result;
-}
-
 static AbstractSyntaxTreeNode *
-ParseContextAllocateNode(ParseContext *context)
-{
-    return ParseContextAllocate(context, sizeof(AbstractSyntaxTreeNode));
-}
-
-static AbstractSyntaxTreeNode *
-ParseExpression(Tokenizer *tokenizer, ParseContext *context)
+ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
 {
     AbstractSyntaxTreeNode *result = 0;
     
@@ -95,7 +10,7 @@ ParseExpression(Tokenizer *tokenizer, ParseContext *context)
        TokenMatchCString(token, "["))
     {
         NextToken(tokenizer, 0);
-        result = ParseExpression(tokenizer, context);
+        result = ParseExpression(tokenizer, arena);
         if(TokenMatchCString(PeekToken(tokenizer), ")") ||
            TokenMatchCString(PeekToken(tokenizer), "]"))
         {
@@ -108,15 +23,25 @@ ParseExpression(Tokenizer *tokenizer, ParseContext *context)
     }
     else if(TokenMatchCString(token, "function"))
     {
-        // TODO(rjf): Function definition.
+        // NOTE(rjf): Function definition.
+        NextToken(tokenizer, 0);
+        Token identifier = {0};
         
-        // AbstractSyntaxTreeNode *def = ParseContextAllocateNode(context);
-        // def->type = ABSTRACT_SYNTAX_TREE_NODE_function_definition;
-        // def->function_definition.param_name = identifier.string;
-        // def->function_definition.param_name_length = identifier.string_length;
-        // def->function_definition.body = ParseExpression(tokenizer, context);
-        
-        
+        if(RequireTokenMatch(tokenizer, "(", 0) &&
+           RequireTokenType(tokenizer, TOKEN_alphanumeric_block, &identifier) &&
+           RequireTokenMatch(tokenizer, ")", 0))
+        {
+            AbstractSyntaxTreeNode *def = MemoryArenaAllocateNode(arena);
+            def->type = ABSTRACT_SYNTAX_TREE_NODE_function_definition;
+            def->function_definition.param_name = identifier.string;
+            def->function_definition.param_name_length = identifier.string_length;
+            def->function_definition.body = ParseExpression(tokenizer, arena);
+            result = def;
+        }
+        else
+        {
+            // NOTE(rjf): ERROR, expected (param_name)
+        }
     }
     else if(TokenMatchCString(token, "let"))
     {
@@ -135,17 +60,17 @@ ParseExpression(Tokenizer *tokenizer, ParseContext *context)
             // NOTE(rjf): ERROR, identifier not found for let expression
         }
         
-        AbstractSyntaxTreeNode *let = ParseContextAllocateNode(context);
+        AbstractSyntaxTreeNode *let = MemoryArenaAllocateNode(arena);
         let->type = ABSTRACT_SYNTAX_TREE_NODE_let;
         let->let.string = identifier.string;
         let->let.string_length = identifier.string_length;
-        let->let.binding_expression = ParseExpression(tokenizer, context);
+        let->let.binding_expression = ParseExpression(tokenizer, arena);
         
         Token in;
         
         if(RequireTokenMatch(tokenizer, "in", &in))
         {
-            let->let.body_expression = ParseExpression(tokenizer, context);
+            let->let.body_expression = ParseExpression(tokenizer, arena);
         }
         else
         {
@@ -160,7 +85,7 @@ ParseExpression(Tokenizer *tokenizer, ParseContext *context)
         {
             // NOTE(rjf): Boolean constant of true.
             NextToken(tokenizer, 0);
-            AbstractSyntaxTreeNode *val = ParseContextAllocateNode(context);
+            AbstractSyntaxTreeNode *val = MemoryArenaAllocateNode(arena);
             val->type = ABSTRACT_SYNTAX_TREE_NODE_boolean_constant;
             val->boolean_constant.value = 1;
             result = val;
@@ -169,7 +94,7 @@ ParseExpression(Tokenizer *tokenizer, ParseContext *context)
         {
             // NOTE(rjf): Boolean constant of false.
             NextToken(tokenizer, 0);
-            AbstractSyntaxTreeNode *val = ParseContextAllocateNode(context);
+            AbstractSyntaxTreeNode *val = MemoryArenaAllocateNode(arena);
             val->type = ABSTRACT_SYNTAX_TREE_NODE_boolean_constant;
             val->boolean_constant.value = 0;
             result = val;
@@ -178,11 +103,26 @@ ParseExpression(Tokenizer *tokenizer, ParseContext *context)
         {
             // NOTE(rjf): In this case, we must have an identifier being used.
             NextToken(tokenizer, 0);
-            AbstractSyntaxTreeNode *val = ParseContextAllocateNode(context);
-            val->type = ABSTRACT_SYNTAX_TREE_NODE_identifier;
-            val->identifier.string = token.string;
-            val->identifier.string_length = token.string_length;
-            result = val;
+            
+            // NOTE(rjf): Is it a function call? If so, we should expect a (param).
+            if(TokenMatchCString(PeekToken(tokenizer), "("))
+            {
+                AbstractSyntaxTreeNode *call = MemoryArenaAllocateNode(arena);
+                call->type = ABSTRACT_SYNTAX_TREE_NODE_function_call;
+                call->function_call.name = token.string;
+                call->function_call.name_length = token.string_length;
+                call->function_call.parameter = ParseExpression(tokenizer, arena);
+                result = call;
+            }
+            else
+            {
+                // NOTE(rjf): This is just an identifier being used.
+                AbstractSyntaxTreeNode *val = MemoryArenaAllocateNode(arena);
+                val->type = ABSTRACT_SYNTAX_TREE_NODE_identifier;
+                val->identifier.string = token.string;
+                val->identifier.string_length = token.string_length;
+                result = val;
+            }
         }
     }
     else if(token.type == TOKEN_numeric_constant)
@@ -192,7 +132,7 @@ ParseExpression(Tokenizer *tokenizer, ParseContext *context)
         
         NextToken(tokenizer, 0);
         
-        AbstractSyntaxTreeNode *val = ParseContextAllocateNode(context);
+        AbstractSyntaxTreeNode *val = MemoryArenaAllocateNode(arena);
         val->type = ABSTRACT_SYNTAX_TREE_NODE_numeric_constant;
         val->numeric_constant.value = TokenToDouble(token);
         result = val;
@@ -221,7 +161,7 @@ ParseExpression(Tokenizer *tokenizer, ParseContext *context)
         {
             NextToken(tokenizer, 0);
             
-            AbstractSyntaxTreeNode *binary_operator = ParseContextAllocateNode(context);
+            AbstractSyntaxTreeNode *binary_operator = MemoryArenaAllocateNode(arena);
             binary_operator->type = ABSTRACT_SYNTAX_TREE_NODE_binary_operator;
             binary_operator->binary_operator.type = operator_type;
             binary_operator->binary_operator.left = result;
@@ -230,7 +170,7 @@ ParseExpression(Tokenizer *tokenizer, ParseContext *context)
                 TokenMatchCString(PeekToken(tokenizer), "(") ||
                 TokenMatchCString(PeekToken(tokenizer), "[");
             
-            binary_operator->binary_operator.right = ParseExpression(tokenizer, context);
+            binary_operator->binary_operator.right = ParseExpression(tokenizer, arena);
             
             AbstractSyntaxTreeNode *right = binary_operator->binary_operator.right;
             

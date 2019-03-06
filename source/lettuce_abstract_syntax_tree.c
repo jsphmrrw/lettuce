@@ -37,9 +37,38 @@ enum
     ABSTRACT_SYNTAX_TREE_NODE_binary_operator,
     ABSTRACT_SYNTAX_TREE_NODE_unary_operator,
     ABSTRACT_SYNTAX_TREE_NODE_function_definition,
+    ABSTRACT_SYNTAX_TREE_NODE_function_call,
 };
 
+enum
+{
+    EVALUATION_RESULT_number,
+    EVALUATION_RESULT_boolean,
+    EVALUATION_RESULT_closure,
+};
+
+typedef struct InterpreterEnvironment InterpreterEnvironment;
 typedef struct AbstractSyntaxTreeNode AbstractSyntaxTreeNode;
+
+typedef struct EvaluationResult
+{
+    int type;
+    union
+    {
+        double number;
+        int boolean;
+        struct
+        {
+            char *param_name;
+            int param_name_length;
+            AbstractSyntaxTreeNode *body;
+            InterpreterEnvironment *environment;
+        }
+        closure;
+    };
+}
+EvaluationResult;
+
 typedef struct AbstractSyntaxTreeNode
 {
     int type;
@@ -99,7 +128,8 @@ typedef struct AbstractSyntaxTreeNode
         
         struct FunctionCall
         {
-            AbstractSyntaxTreeNode *closure;
+            char *name;
+            int name_length;
             AbstractSyntaxTreeNode *parameter;
         }
         function_call;
@@ -107,6 +137,12 @@ typedef struct AbstractSyntaxTreeNode
     };
 }
 AbstractSyntaxTreeNode;
+
+static AbstractSyntaxTreeNode *
+MemoryArenaAllocateNode(MemoryArena *arena)
+{
+    return MemoryArenaAllocate(arena, sizeof(AbstractSyntaxTreeNode));
+}
 
 static void
 PrintAbstractSyntaxTree(AbstractSyntaxTreeNode *root)
@@ -150,32 +186,31 @@ PrintAbstractSyntaxTree(AbstractSyntaxTreeNode *root)
             printf(")");
             break;
         }
+        case ABSTRACT_SYNTAX_TREE_NODE_function_definition:
+        {
+            printf("function(%.*s) ", root->function_definition.param_name_length,
+                   root->function_definition.param_name);
+            PrintAbstractSyntaxTree(root->function_definition.body);
+            break;
+        }
+        case ABSTRACT_SYNTAX_TREE_NODE_function_call:
+        {
+            printf("%.*s(", root->function_call.name_length,
+                   root->function_call.name);
+            PrintAbstractSyntaxTree(root->function_call.parameter);
+            printf(")");
+            break;
+        }
         default: break;
     }
 }
-
-enum
-{
-    EVALUATION_RESULT_number,
-    EVALUATION_RESULT_boolean,
-    EVALUATION_RESULT_closure,
-};
-
-typedef struct EvaluationResult
-{
-    int type;
-    union
-    {
-        double number;
-        int boolean;
-    };
-}
-EvaluationResult;
 
 #define INTERPRETER_ENVIRONMENT_DEFAULT_IDENTIFIER_TABLE_SIZE 512
 
 typedef struct InterpreterEnvironment
 {
+    MemoryArena *arena;
+    
     unsigned int identifier_table_count;
     unsigned int identifier_table_cap;
     
@@ -210,11 +245,25 @@ HashString(char *str, int str_len)
     return hash;
 }
 
-static void
-InterpreterEnvironmentCleanUp(InterpreterEnvironment *environment)
+static InterpreterEnvironment *
+InterpreterEnvironmentDuplicate(InterpreterEnvironment *environment)
 {
-    free(environment->identifier_table_values);
-    free(environment->identifier_table_keys);
+    InterpreterEnvironment *new_environment = MemoryArenaAllocate(environment->arena,
+                                                                  sizeof(InterpreterEnvironment));
+    new_environment->arena = environment->arena;
+    new_environment->identifier_table_count = environment->identifier_table_count;
+    new_environment->identifier_table_cap = environment->identifier_table_cap;
+    new_environment->identifier_table_values = MemoryArenaAllocate(environment->arena,
+                                                                   new_environment->identifier_table_cap * sizeof(new_environment->identifier_table_values[0]));
+    new_environment->identifier_table_keys = MemoryArenaAllocate(environment->arena,
+                                                                 new_environment->identifier_table_cap * sizeof(new_environment->identifier_table_keys[0]));
+    
+    MemoryCopy(new_environment->identifier_table_values, environment->identifier_table_values,
+               sizeof(new_environment->identifier_table_values[0]) * new_environment->identifier_table_cap);
+    MemoryCopy(new_environment->identifier_table_keys, environment->identifier_table_keys,
+               sizeof(new_environment->identifier_table_keys[0]) * new_environment->identifier_table_cap);
+    
+    return new_environment;
 }
 
 static int
@@ -227,10 +276,11 @@ InterpreterEnvironmentBind(InterpreterEnvironment *environment, char *string, in
     {
         environment->identifier_table_count = 0;
         environment->identifier_table_cap = INTERPRETER_ENVIRONMENT_DEFAULT_IDENTIFIER_TABLE_SIZE;
-        environment->identifier_table_values = malloc(sizeof(environment->identifier_table_values[0]) *
-                                                      environment->identifier_table_cap);
-        environment->identifier_table_keys = malloc(sizeof(environment->identifier_table_keys[0]) *
-                                                    environment->identifier_table_cap);
+        environment->identifier_table_values = MemoryArenaAllocate(environment->arena,
+                                                                   sizeof(environment->identifier_table_values[0]) *
+                                                                   environment->identifier_table_cap);
+        environment->identifier_table_keys = MemoryArenaAllocate(environment->arena, sizeof(environment->identifier_table_keys[0]) *
+                                                                 environment->identifier_table_cap);
     }
     
     if(environment->identifier_table_count >= environment->identifier_table_cap)
@@ -297,7 +347,8 @@ InterpreterEnvironmentLookUp(InterpreterEnvironment *environment, char *string, 
             if(environment->identifier_table_keys[hash_slot].string ||
                environment->identifier_table_keys[hash_slot].deleted)
             {
-                if(environment->identifier_table_keys[hash_slot].string &&
+                if(!environment->identifier_table_keys[hash_slot].deleted &&
+                   environment->identifier_table_keys[hash_slot].string &&
                    StringMatch(string, string_length,
                                environment->identifier_table_keys[hash_slot].string,
                                environment->identifier_table_keys[hash_slot].string_length))
@@ -404,6 +455,41 @@ EvaluateAbstractSyntaxTree(InterpreterEnvironment *environment,
                                              &result))
             {
                 // NOTE(rjf): ERROR! Identifier not found.
+            }
+            break;
+        }
+        case ABSTRACT_SYNTAX_TREE_NODE_function_definition:
+        {
+            EvaluationResult closure = {
+                EVALUATION_RESULT_closure,
+            };
+            closure.closure.body = root->function_definition.body;
+            closure.closure.environment = InterpreterEnvironmentDuplicate(environment);
+            closure.closure.param_name = root->function_definition.param_name;
+            closure.closure.param_name_length = root->function_definition.param_name_length;
+            result = closure;
+            
+            break;
+        }
+        case ABSTRACT_SYNTAX_TREE_NODE_function_call:
+        {
+            EvaluationResult closure = {0};
+            if(InterpreterEnvironmentLookUp(environment, root->function_call.name,
+                                            root->function_call.name_length,
+                                            &closure))
+            {
+                InterpreterEnvironment *call_environment = closure.closure.environment;
+                EvaluationResult arg = EvaluateAbstractSyntaxTree(call_environment, root->function_call.parameter);
+                InterpreterEnvironmentBind(call_environment, closure.closure.param_name,
+                                           closure.closure.param_name_length,
+                                           arg);
+                result = EvaluateAbstractSyntaxTree(call_environment, closure.closure.body);
+                InterpreterEnvironmentDelete(call_environment, closure.closure.param_name,
+                                             closure.closure.param_name_length);
+            }
+            else
+            {
+                // NOTE(rjf): ERROR! Function not found.
             }
             break;
         }

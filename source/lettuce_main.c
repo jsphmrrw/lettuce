@@ -10,16 +10,17 @@ static void
 InterpretCode(char *code)
 {
     Tokenizer tokenizer_ = {0};
-    ParseContext context_ = {0};
+    MemoryArena arena_ = {0};
     InterpreterEnvironment environment_ = {0};
     
     Tokenizer *tokenizer = &tokenizer_;
-    ParseContext *context = &context_;
+    MemoryArena *arena = &arena_;
     InterpreterEnvironment *environment = &environment_;
     
     tokenizer->at = code;
+    environment->arena = arena;
     
-    AbstractSyntaxTreeNode *root = ParseExpression(tokenizer, context);
+    AbstractSyntaxTreeNode *root = ParseExpression(tokenizer, arena);
     PrintAbstractSyntaxTree(root);
     printf("\n");
     
@@ -33,8 +34,7 @@ InterpretCode(char *code)
         printf("Program was evaluated to boolean value %s.\n", result.boolean ? "true" : "false");
     }
     
-    InterpreterEnvironmentCleanUp(environment);
-    ParseContextCleanUp(context);
+    MemoryArenaCleanUp(arena);
 }
 
 int

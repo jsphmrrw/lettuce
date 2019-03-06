@@ -1,4 +1,26 @@
 
+static char *
+LoadEntireFileAndNullTerminate(char *filename)
+{
+    char *result = 0;
+    
+    FILE *file = fopen(filename, "r");
+    if(file)
+    {
+        fseek(file, 0, SEEK_END);
+        unsigned int file_size = ftell(file);
+        fseek(file, 0, SEEK_SET);
+        result = malloc(file_size+1);
+        if(result)
+        {
+            fread(result, file_size, 1, file);
+            result[file_size] = 0;
+        }
+    }
+    
+    return result;
+}
+
 static int
 CharIsAlpha(int c)
 {

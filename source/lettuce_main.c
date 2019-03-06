@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 #include "lettuce_utilities.c"
 #include "lettuce_tokenizer.c"
@@ -20,18 +21,31 @@ InterpretCode(char *code)
     tokenizer->at = code;
     environment->arena = arena;
     
-    AbstractSyntaxTreeNode *root = ParseExpression(tokenizer, arena);
-    PrintAbstractSyntaxTree(root);
-    printf("\n");
+    ParseError error = {0};
+    AbstractSyntaxTreeNode *root = ParseExpression(tokenizer, arena, &error);
     
-    EvaluationResult result = EvaluateAbstractSyntaxTree(environment, root);
-    if(result.type == EVALUATION_RESULT_number)
+    if(error.string)
     {
-        printf("Program was evaluated to numeric value %f.\n", result.number);
+        fprintf(stderr, "PARSE ERROR: %s\n", error.string);
     }
-    else if(result.type == EVALUATION_RESULT_boolean)
+    else
     {
-        printf("Program was evaluated to boolean value %s.\n", result.boolean ? "true" : "false");
+        PrintAbstractSyntaxTree(root);
+        printf("\n");
+        
+        EvaluationResult result = EvaluateAbstractSyntaxTree(environment, root);
+        if(result.type == EVALUATION_RESULT_error)
+        {
+            fprintf(stderr, "RUNTIME ERROR: %s\n", result.error.error_string);
+        }
+        else if(result.type == EVALUATION_RESULT_number)
+        {
+            printf("Program was evaluated to numeric value %f.\n", result.number);
+        }
+        else if(result.type == EVALUATION_RESULT_boolean)
+        {
+            printf("Program was evaluated to boolean value %s.\n", result.boolean ? "true" : "false");
+        }
     }
     
     MemoryArenaCleanUp(arena);

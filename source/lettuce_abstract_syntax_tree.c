@@ -49,6 +49,7 @@ enum
 
 enum
 {
+    EVALUATION_RESULT_error,
     EVALUATION_RESULT_number,
     EVALUATION_RESULT_boolean,
     EVALUATION_RESULT_closure,
@@ -62,6 +63,11 @@ typedef struct EvaluationResult
     int type;
     union
     {
+        struct
+        {
+            char *error_string;
+        }
+        error;
         double number;
         int boolean;
         struct
@@ -381,7 +387,10 @@ InterpreterEnvironmentLookUp(InterpreterEnvironment *environment, char *string, 
                                environment->identifier_table_keys[hash_slot].string_length))
                 {
                     found = 1;
-                    *out_result = environment->identifier_table_values[hash_slot].value;
+                    if(out_result)
+                    {
+                        *out_result = environment->identifier_table_values[hash_slot].value;
+                    }
                     break;
                 }
                 else
@@ -482,6 +491,10 @@ EvaluateAbstractSyntaxTree(InterpreterEnvironment *environment,
                                              &result))
             {
                 // NOTE(rjf): ERROR! Identifier not found.
+                result.type = EVALUATION_RESULT_error;
+                result.error.error_string = MakeStringOnArenaF(environment->arena,
+                                                               "%.*s was not declared in this scope.",
+                                                               root->identifier.string_length, root->identifier.string);
             }
             break;
         }

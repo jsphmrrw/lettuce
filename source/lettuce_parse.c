@@ -1,16 +1,32 @@
 
+typedef struct ParseError
+{
+    char *string;
+}
+ParseError;
+
 static AbstractSyntaxTreeNode *
-ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
+ParseExpression(Tokenizer *tokenizer, MemoryArena *arena, ParseError *error_out)
 {
     AbstractSyntaxTreeNode *result = 0;
-    
+    ParseError error = {0};
     Token token = PeekToken(tokenizer);
     
     if(TokenMatchCString(token, "(") ||
        TokenMatchCString(token, "["))
     {
         NextToken(tokenizer, 0);
-        result = ParseExpression(tokenizer, arena);
+        result = ParseExpression(tokenizer, arena, &error);
+        
+        if(error.string)
+        {
+            if(error_out)
+            {
+                *error_out = error;
+            }
+            goto end_parse;
+        }
+        
         if(TokenMatchCString(PeekToken(tokenizer), ")") ||
            TokenMatchCString(PeekToken(tokenizer), "]"))
         {
@@ -19,6 +35,11 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
         else
         {
             // NOTE(rjf): ERROR! Why is there not a following paren?
+            if(error_out)
+            {
+                error_out->string = "Expected ).";
+            }
+            goto end_parse;
         }
     }
     else if(TokenMatchCString(token, "if"))
@@ -28,19 +49,47 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
         
         AbstractSyntaxTreeNode *if_then_else = MemoryArenaAllocateNode(arena);
         if_then_else->type = ABSTRACT_SYNTAX_TREE_NODE_if_then_else;
-        if_then_else->if_then_else.condition = ParseExpression(tokenizer, arena);
+        if_then_else->if_then_else.condition = ParseExpression(tokenizer, arena, &error);
+        
+        if(error.string)
+        {
+            if(error_out)
+            {
+                *error_out = error;
+            }
+            goto end_parse;
+        }
+        
         
         if(TokenMatchCString(PeekToken(tokenizer), "then"))
         {
             NextToken(tokenizer, 0);
         }
         
-        if_then_else->if_then_else.pass_code = ParseExpression(tokenizer, arena);
+        if_then_else->if_then_else.pass_code = ParseExpression(tokenizer, arena, &error);
+        
+        if(error.string)
+        {
+            if(error_out)
+            {
+                *error_out = error;
+            }
+            goto end_parse;
+        }
         
         if(TokenMatchCString(PeekToken(tokenizer), "else"))
         {
             NextToken(tokenizer, 0);
-            if_then_else->if_then_else.fail_code = ParseExpression(tokenizer, arena);
+            if_then_else->if_then_else.fail_code = ParseExpression(tokenizer, arena, &error);
+            
+            if(error.string)
+            {
+                if(error_out)
+                {
+                    *error_out = error;
+                }
+                goto end_parse;
+            }
         }
         else
         {
@@ -63,12 +112,27 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
             def->type = ABSTRACT_SYNTAX_TREE_NODE_function_definition;
             def->function_definition.param_name = identifier.string;
             def->function_definition.param_name_length = identifier.string_length;
-            def->function_definition.body = ParseExpression(tokenizer, arena);
+            def->function_definition.body = ParseExpression(tokenizer, arena, &error);
+            
+            if(error.string)
+            {
+                if(error_out)
+                {
+                    *error_out = error;
+                }
+                goto end_parse;
+            }
+            
             result = def;
         }
         else
         {
             // NOTE(rjf): ERROR, expected (param_name)
+            if(error_out)
+            {
+                error_out->string = "Expected function parameter.";
+            }
+            goto end_parse;
         }
     }
     else if(TokenMatchCString(token, "let"))
@@ -86,23 +150,51 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
         else
         {
             // NOTE(rjf): ERROR, identifier not found for let expression
+            if(error_out)
+            {
+                error_out->string = "Expected identifier for let expression.";
+            }
+            goto end_parse;
         }
         
         AbstractSyntaxTreeNode *let = MemoryArenaAllocateNode(arena);
         let->type = ABSTRACT_SYNTAX_TREE_NODE_let;
         let->let.string = identifier.string;
         let->let.string_length = identifier.string_length;
-        let->let.binding_expression = ParseExpression(tokenizer, arena);
+        let->let.binding_expression = ParseExpression(tokenizer, arena, &error);
+        
+        if(error.string)
+        {
+            if(error_out)
+            {
+                *error_out = error;
+            }
+            goto end_parse;
+        }
         
         Token in;
         
         if(RequireTokenMatch(tokenizer, "in", &in))
         {
-            let->let.body_expression = ParseExpression(tokenizer, arena);
+            let->let.body_expression = ParseExpression(tokenizer, arena, &error);
+            
+            if(error.string)
+            {
+                if(error_out)
+                {
+                    *error_out = error;
+                }
+                goto end_parse;
+            }
         }
         else
         {
             // NOTE(rjf): ERROR, required "in"
+            if(error_out)
+            {
+                error_out->string = "Expected 'in'.";
+            }
+            goto end_parse;
         }
         
         result = let;
@@ -161,6 +253,11 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
     else
     {
         // NOTE(rjf): We have no idea what we are looking at, so ERROR
+        if(error_out)
+        {
+            error_out->string = "Not a valid expression.";
+        }
+        goto end_parse;
     }
     
     token = PeekToken(tokenizer);
@@ -185,7 +282,16 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
                 TokenMatchCString(PeekToken(tokenizer), "(") ||
                 TokenMatchCString(PeekToken(tokenizer), "[");
             
-            binary_operator->binary_operator.right = ParseExpression(tokenizer, arena);
+            binary_operator->binary_operator.right = ParseExpression(tokenizer, arena, &error);
+            
+            if(error.string)
+            {
+                if(error_out)
+                {
+                    *error_out = error;
+                }
+                goto end_parse;
+            }
             
             AbstractSyntaxTreeNode *right = binary_operator->binary_operator.right;
             
@@ -213,6 +319,12 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
         {
             // NOTE(rjf): ERROR! Symbol was not a binary operator, so we really aren't
             //            sure what it is.
+            if(error_out)
+            {
+                error_out->string = MakeStringOnArenaF(arena, "Unexpected token %.*s.",
+                                                       token.string_length, token.string);
+            }
+            goto end_parse;
         }
     }
     
@@ -225,7 +337,17 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
             AbstractSyntaxTreeNode *call = MemoryArenaAllocateNode(arena);
             call->type = ABSTRACT_SYNTAX_TREE_NODE_function_call;
             call->function_call.closure = result;
-            call->function_call.parameter = ParseExpression(tokenizer, arena);
+            call->function_call.parameter = ParseExpression(tokenizer, arena, &error);
+            
+            if(error.string)
+            {
+                if(error_out)
+                {
+                    *error_out = error;
+                }
+                goto end_parse;
+            }
+            
             result = call;
             
             if(TokenMatchCString(PeekToken(tokenizer), ")"))
@@ -234,6 +356,8 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
             }
         }
     }
+    
+    end_parse:;
     
     return result;
 }

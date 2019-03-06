@@ -176,3 +176,26 @@ MemoryArenaAllocate(MemoryArena *arena, unsigned int size)
     
     return result;
 }
+
+static char *
+MakeStringOnArenaF(MemoryArena *arena, char *format, ...)
+{
+    char *result = 0;
+    
+    va_list args;
+    va_start(args, format);
+    unsigned int needed_bytes = vsnprintf(0, 0, format, args)+1;
+    va_end(args);
+    
+    result = MemoryArenaAllocate(arena, needed_bytes);
+    
+    if(result)
+    {
+        va_start(args, format);
+        vsnprintf(result, needed_bytes, format, args);
+        va_end(args);
+        result[needed_bytes-1] = 0;
+    }
+    
+    return result;
+}

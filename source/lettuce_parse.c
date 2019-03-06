@@ -26,14 +26,15 @@ ParseExpression(Tokenizer *tokenizer, MemoryArena *arena)
         // NOTE(rjf): If/Then/Else.
         NextToken(tokenizer, 0);
         
+        AbstractSyntaxTreeNode *if_then_else = MemoryArenaAllocateNode(arena);
+        if_then_else->type = ABSTRACT_SYNTAX_TREE_NODE_if_then_else;
+        if_then_else->if_then_else.condition = ParseExpression(tokenizer, arena);
+        
         if(TokenMatchCString(PeekToken(tokenizer), "then"))
         {
             NextToken(tokenizer, 0);
         }
         
-        AbstractSyntaxTreeNode *if_then_else = MemoryArenaAllocateNode(arena);
-        if_then_else->type = ABSTRACT_SYNTAX_TREE_NODE_if_then_else;
-        if_then_else->if_then_else.condition = ParseExpression(tokenizer, arena);
         if_then_else->if_then_else.pass_code = ParseExpression(tokenizer, arena);
         
         if(TokenMatchCString(PeekToken(tokenizer), "else"))
